@@ -1,26 +1,35 @@
-#include "list.c"
+#include "header.c"
 
 int main(int argc, char*argv[])
 {
-  /*
-   * Access, attach and reference the shared memory
-   */
-	
+  //sleep(120);
+  /********************************** Initialize Shared Memory And Semaphore Set *************************************/		
   int shmid;
   int pid=getppid();
   shmid = shmget((int) pid, 0,0);                                     /*Sahred Memory key is Equal to Parent ID*/
+  if(shmid==-1){
+     perror("Shared Memory");
+     exit(0);
+  }else{
+         printf("Shared Memory Attached to Player %d \n", atoi(argv[1]));
+       }
 
   Pointer sharedMemory = (Pointer)shmat(shmid, 0, 0);                 /*attach the Player to Shared Memory*/   
 	
-
-   int semid;
-   union semun    arg;
+  int semid;
+  union semun arg;
 
   if ( (semid = semget((int) getppid(), 5, 0)) == -1 ) {
     perror("semget -- producer -- access");
     exit(3);
    }
 
+  srand(time(NULL));
+  /*sequence will continue Until one Team Reach to 61*/
+
+while(sharedMemory->TotalOneScore < 61 && sharedMemory->TotalTwoScore < 61){
+   
+    /********************************** Calculate the number of Winning Sub round *************************************/
     /*Try to acquire Sempahore for Process , Set the Semaphore number to player number */
     /*first semaphore will make player Call a number of sub rounds and Tarnib */
     acquire.sem_num = atoi(argv[1]);
@@ -29,8 +38,11 @@ int main(int argc, char*argv[])
       perror("semop -- producer -- acquire");
       exit(4);
     }
-     printf(" Player Number is %s\n",argv[1]);
-    /*print the cards Disributed*/
+    printf(" Player Number is %s  is counting  his winning sub Round \n",argv[1]);
+   
+    /*Decide how Many Winning Sub round and Update it into shared Memory */
+    /*Useless if Statement*/
+
      if(atoi(argv[1])==atoi(argv[1]))
          {
           int Tar;
@@ -80,22 +92,17 @@ int main(int argc, char*argv[])
                semctl(semid,0,SETVAL,arg);
             }
 
+  /********************************** Start Playing SubRounds *************************************/
 
     /*After Finish the Loop for Deciding Highest Call , Parent Process Give Semaphore 
      * to Specific Player to Play a Card 
      */   
-    /*we will make the Cards for each Player As a Linked List 
-     * Each Card that we Select we Remove it from the List 
-     * this make the game and programming more realistic 	
-     */ 
 
-   List L =createList();
-   toLinkedList(L,atoi(argv[1]),sharedMemory);         //*Change the Card Set to a Linked List to Make it More Flexible*//
-   //We have the Card Set as A Linked List we will loop this part until the list is empty
-   /*replace with While when done*/
-  //if(!isUsed(sharedMemory,1)){
+   //*at the begining each player will have 13 cards , so we will finish the rounds after each player played 13 times *//
    int i;
    for(i=0;i<13;i++){ 
+    //*Player Who Acquire the Semaphore Has the Highest Call first*//
+    //*Now all Players Are Waiting For Parent to Decide the highest Call to start Playing*//
     acquire.sem_num = atoi(argv[1]);
 
     if ( semop(semid, &acquire, 1) == -1 ) {
@@ -103,12 +110,9 @@ int main(int argc, char*argv[])
       exit(4);
     }
 
-    /*Select Card to Play and Remove from the List*/
-    // printf("Test Acquire for Player %s\n",argv[1]);
-      //SelectCard(L,sharedMemory,atoi(argv[1]));
-     Selectfirst(sharedMemory,atoi(argv[1]));
-    //*in this part we will decide which Card to Play*//
-
+    chooseCard(sharedMemory,atoi(argv[1]));
+   /* printf("Card is %d type :%d\n",sharedMemory->PlayedRoundCards[atoi(argv[1])].cardNum,sharedMemory->PlayedRoundCards[atoi(argv[1])].type);*/
+    //*in this part we will decide which Card to Play*// 
     release.sem_num = atoi(argv[1]);
 
     arg.val=1;                                     /* give a semaphore to the next Process*/
@@ -131,11 +135,285 @@ int main(int argc, char*argv[])
                // give sempahore to Parent Process , and Reset flag for Players to Start again after computing Results
                semctl(semid,0,SETVAL,arg);
             }
+
   }//end of while loop , end of round 
-  //here we will make another loop ( might be infinite until the parent kill the process when score reach to 61)
+ }/*Game Finished When One of the Teams Reach to 61*/
+  exit(0);
   return 0;
 }
+void chooseCard(Pointer sharedMemory, int PlayerNum)
+{
+  if(sharedMemory==NULL)
+   {
+     perror("Shared Memory");
+     exit(0);
+   }else {
+            if(sharedMemory->Determine==PlayerNum)
+               {
+                  /*choose the Highest unused Card between your cards*/
+                  int i;
+ 		  int max=0,type=0,index=-1;
+                  switch(PlayerNum)
+                   {
+			case 1: for(i=0;i<13;i++)
+ 				{
+				  if(sharedMemory->player1[i].cardNum>max && sharedMemory->player1[i].state ==0)
+                                     {
+ 					max=sharedMemory->player1[i].cardNum;
+				  	type=sharedMemory->player1[i].type;
+					index=i;
+                                     }
+				}
+				sharedMemory->player1[index].state=1;
+				sharedMemory->Category=type;
+				sharedMemory->PlayedRoundCards[0].cardNum=max;
+				sharedMemory->PlayedRoundCards[0].type=type;
+				break;
 
+			case 2: for(i=0;i<13;i++)
+ 				{
+				  if(sharedMemory->player2[i].cardNum>max && sharedMemory->player2[i].state ==0)
+                                     {
+ 					max=sharedMemory->player2[i].cardNum;
+				  	type=sharedMemory->player2[i].type;
+					index=i;
+                                     }
+				}
+				sharedMemory->player2[index].state=1;
+				sharedMemory->Category=type;
+				sharedMemory->PlayedRoundCards[1].cardNum=max;
+				sharedMemory->PlayedRoundCards[1].type=type;
+				break;
+
+			case 3: for(i=0;i<13;i++)
+ 				{
+				  if(sharedMemory->player3[i].cardNum>max && sharedMemory->player3[i].state ==0)
+                                     {
+ 					max=sharedMemory->player3[i].cardNum;
+				  	type=sharedMemory->player3[i].type;
+					index=i;
+                                     }
+				}
+				sharedMemory->player3[index].state=1;
+				sharedMemory->Category=type;
+				sharedMemory->PlayedRoundCards[2].cardNum=max;
+				sharedMemory->PlayedRoundCards[2].type=type;
+				break;
+
+			case 4: for(i=0;i<13;i++)
+ 				{
+				  if(sharedMemory->player4[i].cardNum>max && sharedMemory->player4[i].state ==0)
+                                     {
+ 					max=sharedMemory->player4[i].cardNum;
+				  	type=sharedMemory->player4[i].type;
+					index=i;
+                                     }
+				}
+				sharedMemory->player4[index].state=1;
+				sharedMemory->Category=type;
+				sharedMemory->PlayedRoundCards[3].cardNum=max;
+				sharedMemory->PlayedRoundCards[3].type=type;
+				break;
+
+                   }
+               }else {
+                     /* if he is not the first player to play */
+                    /* we should find the largest card from a specific Category of Play */
+                     int  max=0, i , type=0, index=-1, flag=0;
+                  switch(PlayerNum)
+                   {
+			case 1: for(i=0;i<13;i++)
+ 				{
+				  if(sharedMemory->player1[i].cardNum>max && sharedMemory->player1[i].state ==0 )
+                                     { 
+                                         if(sharedMemory->player1[i].type=sharedMemory->Category){
+ 				            max=sharedMemory->player1[i].cardNum;
+				  	    type=sharedMemory->player1[i].type;
+					    index=i;
+					     flag=1;
+                                           }
+                                     }
+				}
+                               //if flag equal to one means that we have a card from the same  category //
+                                if(flag==1){
+				  sharedMemory->player1[index].state=1;
+				  sharedMemory->PlayedRoundCards[0].cardNum=max;
+				  sharedMemory->PlayedRoundCards[0].type=type;
+                                }else {
+   					int fl=0;
+					//*we must choose first Tarnib Card We Face , to make it simple*//
+					for(i=0;i<13;i++)
+					  {
+						if(sharedMemory->player1[i].type==sharedMemory->Tarnib)
+                                                  {
+							sharedMemory->PlayedRoundCards[0].cardNum=sharedMemory->player1[i].cardNum;
+							sharedMemory->PlayedRoundCards[0].type=sharedMemory->player1[i].type;
+							sharedMemory->player1[i].state=1;
+							fl=1;
+							break;
+						  }
+					  }
+                                        if(fl==0)
+					{
+						/*we don't Have any Tarnib Cards , just throw Any Card */
+                                                for(i=0;i<13;i++)
+                                                  {
+							if(sharedMemory->player1[i].state==0){
+							sharedMemory->PlayedRoundCards[0].cardNum=sharedMemory->player1[i].cardNum;
+							sharedMemory->PlayedRoundCards[0].type=sharedMemory->player1[i].type;
+							sharedMemory->player1[i].state=1;
+							break;
+							}
+ 						  }
+					}
+				      }
+				break;
+
+			case 2:  for(i=0;i<13;i++)
+ 				{
+				  if(sharedMemory->player2[i].cardNum>max && sharedMemory->player2[i].state ==0 )
+                                     { 
+                                         if(sharedMemory->player2[i].type=sharedMemory->Category){
+ 				            max=sharedMemory->player2[i].cardNum;
+				  	    type=sharedMemory->player2[i].type;
+					    index=i;
+					     flag=1;
+                                           }
+                                     }
+				}
+                               //if flag equal to one means that we have a card from the same  category //
+                                if(flag==1){
+				  sharedMemory->player2[index].state=1;
+				  sharedMemory->PlayedRoundCards[1].cardNum=max;
+				  sharedMemory->PlayedRoundCards[1].type=type;
+                                }else {
+   					int fl=0;
+					//*we must choose first Tarnib Card We Face , to make it simple*//
+					for(i=0;i<13;i++)
+					  {
+						if(sharedMemory->player2[i].type==sharedMemory->Tarnib)
+                                                  {
+							sharedMemory->PlayedRoundCards[1].cardNum=sharedMemory->player2[i].cardNum;
+							sharedMemory->PlayedRoundCards[1].type=sharedMemory->player2[i].type;
+							sharedMemory->player2[i].state=1;
+							fl=1;
+							break;
+						  }
+					  }
+                                        if(fl==0)
+					{
+						/*we don't Have any Tarnib Cards , just throw Any Card */
+                                                for(i=0;i<13;i++)
+                                                  {
+							if(sharedMemory->player2[i].state==0){
+							sharedMemory->PlayedRoundCards[1].cardNum=sharedMemory->player2[i].cardNum;
+							sharedMemory->PlayedRoundCards[1].type=sharedMemory->player2[i].type;
+							sharedMemory->player2[i].state=1;
+							break;
+							}
+ 						  }
+					}
+				      }
+				break;
+
+			case 3:  for(i=0;i<13;i++)
+ 				{
+				  if(sharedMemory->player3[i].cardNum>max && sharedMemory->player3[i].state ==0 )
+                                     { 
+                                         if(sharedMemory->player3[i].type=sharedMemory->Category){
+ 				            max=sharedMemory->player3[i].cardNum;
+				  	    type=sharedMemory->player3[i].type;
+					    index=i;
+					     flag=1;
+                                           }
+                                     }
+				}
+                               //if flag equal to one means that we have a card from the same  category //
+                                if(flag==1){
+				  sharedMemory->player3[index].state=1;
+				  sharedMemory->PlayedRoundCards[2].cardNum=max;
+				  sharedMemory->PlayedRoundCards[2].type=type;
+                                }else {
+   					int fl=0;
+					//*we must choose first Tarnib Card We Face , to make it simple*//
+					for(i=0;i<13;i++)
+					  {
+						if(sharedMemory->player3[i].type==sharedMemory->Tarnib)
+                                                  {
+							sharedMemory->PlayedRoundCards[2].cardNum=sharedMemory->player3[i].cardNum;
+							sharedMemory->PlayedRoundCards[2].type=sharedMemory->player3[i].type;
+							sharedMemory->player3[i].state=1;
+							fl=1;
+							break;
+						  }
+					  }
+                                        if(fl==0)
+					{
+						/*we don't Have any Tarnib Cards , just throw Any Card */
+                                                for(i=0;i<13;i++)
+                                                  {
+							if(sharedMemory->player3[i].state==0){
+							sharedMemory->PlayedRoundCards[2].cardNum=sharedMemory->player3[i].cardNum;
+							sharedMemory->PlayedRoundCards[2].type=sharedMemory->player3[i].type;
+							sharedMemory->player3[i].state=1;
+							break;
+							}
+ 						  }
+					}
+				      }
+				break;
+				
+			case 4:  for(i=0;i<13;i++)
+ 				{
+				  if(sharedMemory->player4[i].cardNum>max && sharedMemory->player4[i].state ==0 )
+                                     { 
+                                         if(sharedMemory->player4[i].type=sharedMemory->Category){
+ 				            max=sharedMemory->player4[i].cardNum;
+				  	    type=sharedMemory->player4[i].type;
+					    index=i;
+					     flag=1;
+                                           }
+                                     }
+				}
+                               //if flag equal to one means that we have a card from the same  category //
+                                if(flag==1){
+				  sharedMemory->player4[index].state=1;
+				  sharedMemory->PlayedRoundCards[3].cardNum=max;
+				  sharedMemory->PlayedRoundCards[3].type=type;
+                                }else {
+   					int fl=0;
+					//*we must choose first Tarnib Card We Face , to make it simple*//
+					for(i=0;i<13;i++)
+					  {
+						if(sharedMemory->player4[i].type==sharedMemory->Tarnib)
+                                                  {
+							sharedMemory->PlayedRoundCards[3].cardNum=sharedMemory->player4[i].cardNum;
+							sharedMemory->PlayedRoundCards[3].type=sharedMemory->player4[i].type;
+							sharedMemory->player4[i].state=1;
+							fl=1;
+							break;
+						  }
+					  }
+                                        if(fl==0)
+					{
+						/*we don't Have any Tarnib Cards , just throw Any Card */
+                                                for(i=0;i<13;i++)
+                                                  {
+							if(sharedMemory->player4[i].state==0){
+							sharedMemory->PlayedRoundCards[3].cardNum=sharedMemory->player4[i].cardNum;
+							sharedMemory->PlayedRoundCards[3].type=sharedMemory->player4[i].type;
+							sharedMemory->player4[i].state=1;
+							break;
+							}
+ 						  }
+					}
+				      }
+				break;
+
+                   }
+                     }
+         }
+}
 
 void Selectfirst(Pointer sharedMemory , int PlayerNum)
 {
@@ -215,6 +493,7 @@ void SelectCard(List L , Pointer sharedMemory, int PlayerNum)
 			sharedMemory->PlayedRoundCards[PlayerNum-1].cardNum=max;
                         sharedMemory->PlayedRoundCards[PlayerNum-1].type=category;
     		        sharedMemory->Category=category;
+			sharedMemory->Determine=-1;
                     }else{
  			  /*this is not the first Player*/
  			  /* we should play a Card from the Same Category*/
